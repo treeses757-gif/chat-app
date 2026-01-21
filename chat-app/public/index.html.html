@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Многопользовательский чат</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a; 
+            color: #fff; 
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .container { display: flex; flex-direction: column; height: 95vh; }
+        .header { 
+            background: #2d2d2d; 
+            padding: 15px; 
+            border-radius: 10px 10px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chat-container { 
+            flex: 1; 
+            background: #252525; 
+            overflow-y: auto; 
+            padding: 20px;
+            border-left: 1px solid #444;
+            border-right: 1px solid #444;
+        }
+        .input-container { 
+            background: #2d2d2d; 
+            padding: 15px; 
+            border-radius: 0 0 10px 10px;
+            display: flex;
+            gap: 10px;
+        }
+        input, button { 
+            padding: 12px 15px; 
+            border: none; 
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        input { 
+            flex: 1; 
+            background: #3a3a3a; 
+            color: white;
+            border: 1px solid #444;
+        }
+        button { 
+            background: #4CAF50; 
+            color: white; 
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        button:hover { background: #45a049; }
+        .message { 
+            margin-bottom: 15px; 
+            padding: 10px 15px;
+            border-radius: 8px;
+            background: #2d2d2d;
+            border-left: 4px solid #4CAF50;
+            animation: fadeIn 0.3s;
+        }
+        .system-message { 
+            background: #1a3a5f; 
+            border-left-color: #2196F3;
+            text-align: center;
+            font-style: italic;
+        }
+        .user-joined { 
+            background: #1b5e20; 
+            border-left-color: #4CAF50;
+        }
+        .user-left { 
+            background: #5d4037; 
+            border-left-color: #795548;
+        }
+        .message-header { 
+            display: flex; 
+            justify-content: space-between;
+            margin-bottom: 5px;
+            color: #aaa;
+            font-size: 0.9em;
+        }
+        .username { 
+            font-weight: bold; 
+            color: #4CAF50;
+        }
+        .timestamp { color: #777; }
+        .message-text { font-size: 1.1em; }
+        #usersCount { 
+            background: #4CAF50; 
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        #usernameInput { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💬 Многопользовательский чат</h1>
+            <div>Онлайн: <span id="usersCount">0</span></div>
+        </div>
+        
+        <div class="chat-container" id="messages">
+            <!-- Сообщения будут здесь -->
+        </div>
+        
+        <div class="input-container">
+            <input type="text" id="usernameInput" placeholder="Введите ваше имя...">
+            <input type="text" id="messageInput" placeholder="Введите сообщение..." disabled>
+            <button id="sendButton" disabled>Отправить</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let currentUsername = '';
+        
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const usernameInput = document.getElementById('usernameInput');
+        const usersCountSpan = document.getElementById('usersCount');
+        
+        // Фокус на поле ввода имени при загрузке
+        usernameInput.style.display = 'block';
+        usernameInput.focus();
+        
+        // Обработчик ввода имени
+        usernameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && usernameInput.value.trim()) {
+                currentUsername = usernameInput.value.trim();
+                socket.emit('join', currentUsername);
+                usernameInput.style.display = 'none';
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                messageInput.focus();
+                
+                addSystemMessage(`Вы вошли как: ${currentUsername}`);
+            }
+        });
+        
+        // Отправка сообщения
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (text) {
+                socket.emit('message', { text });
+                messageInput.value = '';
+            }
+        }
+        
+        sendButton.addEventListener('click', sendMessage);
+        
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+        
+        // Добавление сообщений в чат
+        function addMessage(data, className = '') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${className}`;
+            
+            const date = new Date(data.timestamp);
+            const time = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <span class="username">${data.username || 'Система'}</span>
+                    <span class="timestamp">${time}</span>
+                </div>
+                <div class="message-text">${data.text}</div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function addSystemMessage(text, type = 'info') {
+            addMessage({
+                username: 'Система',
+                text: text,
+                timestamp: new Date().toISOString()
+            }, 'system-message');
+        }
+        
+        // Обработчики событий Socket.IO
+        socket.on('connect', () => {
+            addSystemMessage('Подключение к серверу...');
+        });
+        
+        socket.on('system', (data) => {
+            addSystemMessage(data.text);
+        });
+        
+        socket.on('new_message', (data) => {
+            addMessage(data);
+        });
+        
+        socket.on('user_joined', (data) => {
+            addMessage({
+                username: 'Система',
+                text: `✅ ${data.username} присоединился к чату`,
+                timestamp: data.timestamp
+            }, 'user-joined');
+            usersCountSpan.textContent = data.usersCount;
+        });
+        
+        socket.on('user_left', (data) => {
+            addMessage({
+                username: 'Система',
+                text: `❌ ${data.username} покинул чат`,
+                timestamp: data.timestamp
+            }, 'user-left');
+            usersCountSpan.textContent = data.usersCount;
+        });
+        
+        socket.on('users_list', (users) => {
+            usersCountSpan.textContent = users.length;
+            if (users.length > 0) {
+                addSystemMessage(`В чате ${users.length} пользователей`);
+            }
+        });
+        
+        socket.on('disconnect', () => {
+            addSystemMessage('Отключено от сервера. Перезагрузите страницу.');
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+        });
+    </script>
+</body>
+</html>
